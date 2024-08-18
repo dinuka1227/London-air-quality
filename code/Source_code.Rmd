@@ -1,0 +1,579 @@
+---
+title: "Source_Code"
+author: "s18840"
+date: "2024-01-29"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#loading packages needed
+```{r}
+library(tidyverse)
+library(skimr)
+library(janitor)
+```
+```{r}
+library(lubridate)
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+library(stringr)
+```
+
+
+#importing the data sets
+```{r}
+Local_data<-read_csv("../data/london_local_data_2022.csv",col_types = c('cfTddddddd'))
+```
+
+
+```{r}
+skim(Local_data)
+```
+```{r}
+glimpse(Local_data)
+```
+```{r}
+local_site<-read_csv("../data/london_local_sites.csv",col_types = c('fcddf'))
+```
+
+```{r}
+skim(local_site)
+```
+```{r}
+glimpse(local_site)
+```
+
+```{r}
+view(local_site)
+view(Local_data)
+```
+
+
+#to check the 36 site names and codes
+```{r}
+unique_sites<-local_site%>%
+  distinct(code,site)
+print(unique_sites)
+```
+
+```{r}
+write_csv(unique_sites,"../Latex_file/unique_sites.csv",col_names = TRUE)
+```
+
+
+#to check gas types
+```{r}
+
+gas_types <- colnames(Local_data)[6:12]
+gas_types
+```
+
+#to get the gasses and no of sites that they are recorded
+```{r}
+parameter_counts <- local_site %>%
+  count(Parameter_name) %>%
+  rename("No of Sites" = n)%>%
+  rename(Pollutants=Parameter_name)
+
+parameter_counts
+```
+
+```{r}
+write_csv(parameter_counts,"../Latex_file/parameter_counts.csv",col_names = TRUE)
+```
+
+```{r}
+str(Local_data)
+```
+
+
+#replacing NA values with a zero
+```{r}
+Local_data[is.na(Local_data)] <- 0
+```
+
+#seperating date column in to more simmpler way
+
+```{r}
+Local_data<-Local_data%>%
+  mutate(time = as.factor(format(as.POSIXct(date),format ="%H:%M:%S")),date=as.Date(date))%>%
+  relocate(time, .after = date)
+
+```
+
+
+```{r}
+Local_data <- Local_data %>%
+  mutate(month =factor(case_when(
+    month(date)==1 ~ "January",
+    month(date)==2 ~ "February",
+    month(date)==3 ~ "March",
+    month(date)==4 ~ "April",
+    month(date)==5 ~ "May",
+    month(date)==6 ~ "June",
+    month(date)==7 ~ "July",
+    month(date)==8 ~ "August",
+    month(date)==9 ~ "September",
+    month(date)==10 ~ "October",
+    month(date)==11 ~ "November",
+    month(date)==12 ~ "December"
+  )),.after = date)
+
+Local_data$month <- factor(Local_data$month,levels = c("January","February","March","April","May","June","July","August","September","October","November","December"))
+```
+
+
+
+```{r}
+head(Local_data)
+```
+
+
+#year 2022 analysis by gas
+```{r}
+
+Total_count <-Local_data %>% select(nox,no2,no,pm10,o3,pm2_5,so2) %>%
+  summarise_all(sum) %>% t() %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "substance") %>%
+  rename(total = V1)
+Total_count
+
+```
+
+
+
+```{r}
+yearly_graph_1<-Total_count%>%
+  filter(substance != "nox")%>%
+  ggplot(aes(x = substance, y = total, fill = substance))+
+  geom_bar(stat = "identity", position = "dodge")+
+  labs(x = "Substance",
+       y = "Total Emissions")+
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))
+
+yearly_graph_1
+```
+
+```{r}
+postscript(file = "../Latex_file/Graphs/yearly_graph_1.eps",width = 10, height = 8, horizontal = F)
+yearly_graph_1
+dev.off()
+```
+
+
+
+
+#monthly analysis
+```{r}
+Total_per_month <- Local_data %>% group_by(month)%>%
+  summarise(Total = sum(no)+sum(no2)+sum(nox)+
+              sum(pm10)+sum(o3)+sum(pm2_5)+sum(so2)) 
+Total_per_month
+
+
+#top 6 months
+Total_per_month %>%
+  arrange(desc(Total)) %>%
+  slice_head(n=6)
+
+#least
+Total_per_month %>%
+  arrange(Total) %>%
+  slice_head()
+```
+
+```{r}
+Total_per_month %>%
+  ggplot(aes(x = month, y = Total)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Emissions per Month",
+       x = "Month",
+       y = "Total Emissions") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
+```
+
+
+#monthly analysis by gas
+```{r}
+Total_per_month_by_gas <- Local_data %>%
+  group_by(month) %>%
+  summarise(
+    nox = sum(nox),
+    no2 = sum(no2),
+    no = sum(no),
+    pm10 = sum(pm10),
+    o3 = sum(o3),
+    pm2_5 = sum(pm2_5),
+    so2 = sum(so2)
+  )
+
+Total_per_month_by_gas
+  
+```
+```{r}
+Total_per_month_by_gas_2<-Total_per_month_by_gas%>%
+  gather(key = "Gas", value = "Total", -month) %>%
+  ggplot(aes(x = month, y = Total, fill = Gas)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+       x = "Month",
+       y = "Total Emissions") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))
+  
+Total_per_month_by_gas_2
+
+postscript(file = "../Latex_file/Graphs/Total_per_month_by_gas_2.eps",width = 10, height = 8, horizontal = F)
+Total_per_month_by_gas_2
+dev.off()
+
+```
+```{r}
+
+```
+
+```{r}
+Total_per_month_by_gas_3<-Total_per_month_by_gas %>%
+  gather(key = "Gas", value = "Total", -month) %>%
+  ggplot(aes(x = month, y = Total, color = Gas, group = Gas)) +
+  geom_point() +
+  geom_line() +
+  labs(
+       x = "Month",
+       y = "Total Emissions") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 1))
+
+Total_per_month_by_gas_3
+
+postscript(file = "../Latex_file/Graphs/Total_per_month_by_gas_3.eps",width = 10, height = 8, horizontal = F)
+Total_per_month_by_gas_3
+dev.off()
+```
+
+
+```{r}
+hour_wise_data <- Local_data %>% group_by(time)%>%
+  summarise(Total = sum(no)+sum(no2)+sum(nox)+
+              sum(pm10)+sum(o3)+sum(pm2_5)+sum(so2)) 
+hour_wise_data
+
+
+#top 10 hours
+hour_wise_data %>%
+  arrange(desc(Total)) %>%
+  slice_head(n=10)
+
+#least
+hour_wise_data %>%
+  arrange(Total) %>%
+  slice_head(n=5)
+```
+
+
+
+#Filtering observations by sites wich collect data about emitting same gas
+
+
+```{r}
+Sites_emit_no2<-local_site%>%filter(Parameter_name=="Nitrogen dioxide")
+Sites_emit_PM10<-local_site%>%filter(Parameter_name=="PM10 particulate matter (Hourly measured)")
+Sites_emit_o3<-local_site%>%filter(Parameter_name=="Ozone")
+Sites_emit_PM2.5<-local_site%>%filter(Parameter_name=="PM2.5 particulate matter (Hourly measured)")
+Sites_emit_so2<-local_site%>%filter(Parameter_name=="Sulphur dioxide")
+```
+```{r}
+no2_local_data<-inner_join(Local_data,Sites_emit_no2,by=c("site", "code"))
+PM10_local_data<-inner_join(Local_data,Sites_emit_PM10,by=c("site", "code"))
+o3_local_data<-inner_join(Local_data,Sites_emit_o3,by=c("site", "code"))
+PM2.5_local_data<-inner_join(Local_data,Sites_emit_PM2.5,by=c("site", "code"))
+So2_local_data<-inner_join(Local_data,Sites_emit_so2,by=c("site", "code"))
+
+```
+
+
+```{r}
+No2_map_df<-no2_local_data%>%select(site,longitude,latitude,no2)
+PM10_map_df<-PM10_local_data%>%select(site,longitude,latitude,pm10)
+o3_map_df<-o3_local_data%>%select(site,longitude,latitude,o3)
+PM2.5_map_df<-PM2.5_local_data%>%select(site,longitude,latitude,pm2_5)
+So2_map_df<-So2_local_data%>%select(site,longitude,latitude,so2)
+```
+
+
+#NO2analysis by site
+
+```{r}
+no2_by_site <- no2_local_data %>% group_by(site)%>%
+  summarise(Total = sum(no2)) 
+no2_by_site
+```
+
+```{r}
+no2_by_site_graph<-no2_by_site %>%
+  mutate(City = str_trim(str_extract(site, "^[^-]+"))) %>%
+  ggplot(aes(x = City, y = Total, fill = City)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "City",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  coord_flip()
+
+no2_by_site_graph
+
+postscript(file = "../Latex_file/Graphs/no2_by_site_graph.eps",width = 10, height = 8, horizontal = F)
+no2_by_site_graph
+dev.off()
+  
+```
+
+
+```{r}
+no2_by_Westminister <- no2_local_data %>% 
+   filter(str_detect(site, "^Westminster"))%>%
+  group_by(site)%>%
+  summarise(Total = sum(no2)) 
+no2_by_Westminister
+```
+
+```{r}
+no2_by_Westminister_graph<-no2_by_Westminister %>%
+  ggplot(aes(x = site, y = Total, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "Site",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15))+
+  coord_flip()
+
+no2_by_Westminister_graph
+
+postscript(file = "../Latex_file/Graphs/no2_by_Westminister_graph.eps",width = 10, height = 8, horizontal = F)
+no2_by_Westminister_graph
+dev.off()
+
+
+```
+
+```{r}
+No2_map_df %>%
+  ggplot(aes(x = longitude, y = latitude, color = no2)) +
+  geom_point() +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Scatter Plot of no2 based on Longitude and Latitude",
+       x = "Longitude",
+       y = "Latitude",
+       color = "no2") +
+  theme_minimal()
+```
+
+
+```{r}
+No2_map<-No2_map_df %>%
+  mutate(City = str_trim(str_extract(site, "^[^-]+"))) %>%
+  ggplot(aes(x = longitude, y = latitude, size = no2,color = City)) +
+  geom_point() +
+  
+  
+  scale_size_continuous(range = c(2, 10)) +  # Adjust the range of sizes as needed
+  labs(
+       x = "Longitude",
+       y = "Latitude",
+       color = "City",
+       size = "no2") +
+  theme_minimal()
+
+No2_map
+
+postscript(file = "../Latex_file/Graphs/No2_map.eps",width = 15, height = 20, horizontal = F)
+No2_map
+dev.off()
+```
+
+
+
+#PM10 analysis by site
+
+
+```{r}
+PM10_by_site <- PM10_local_data %>% group_by(site)%>%
+  summarise(Total = sum(pm10)) 
+PM10_by_site
+```
+
+
+
+```{r}
+PM10_by_site_graph<-PM10_by_site%>%
+  mutate(City = str_trim(str_extract(site, "^[^-]+"))) %>%
+  ggplot(aes(x = City, y = Total, fill = City)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "City",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+  coord_flip()
+
+PM10_by_site_graph
+
+postscript(file = "../Latex_file/Graphs/PM10_by_site_graph.eps",width = 10, height = 8, horizontal = F)
+PM10_by_site_graph
+dev.off()
+
+  
+  
+```
+
+
+```{r}
+PM10_by_Wandsworth<- PM10_local_data %>% 
+   filter(str_detect(site, "^Wandsworth"))%>%
+  group_by(site)%>%
+  summarise(Total = sum(pm10)) 
+PM10_by_Wandsworth
+```
+
+```{r}
+PM10_by_Wandsworth_graph<-PM10_by_Wandsworth%>%
+  ggplot(aes(x = site, y = Total, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "Site",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15))
+
+
+PM10_by_Wandsworth_graph
+
+postscript(file = "../Latex_file/Graphs/PM10_by_Wandsworth_graph.eps",width = 10, height = 8, horizontal = F)
+PM10_by_Wandsworth_graph
+dev.off()
+
+```
+
+
+
+```{r}
+PM10_map<-PM10_map_df %>%
+  mutate(City = str_trim(str_extract(site, "^[^-]+"))) %>%
+  ggplot(aes(x = longitude, y = latitude, size = pm10,color = City)) +
+  geom_point() +
+  
+  
+  scale_size_continuous(range = c(2, 10)) +  # Adjust the range of sizes as needed
+  labs(
+       x = "Longitude",
+       y = "Latitude",
+       color = "City",
+       size = "PM10 amunt") +
+  theme_minimal()
+
+PM10_map
+
+postscript(file = "../Latex_file/Graphs/PM10_map.eps",width = 10, height = 8, horizontal = F)
+PM10_map
+dev.off()
+```
+
+
+
+
+
+
+#PM2.5 analysis by site
+
+
+```{r}
+PM2.5_by_site <- PM2.5_local_data %>% group_by(site)%>%
+  summarise(Total = sum(pm2_5)) 
+PM2.5_by_site
+
+```
+
+```{r}
+PM2.5_by_site_graph<-PM2.5_by_site%>%
+ 
+  ggplot(aes(x = site, y = Total, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "Site",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))+
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+
+PM2.5_by_site_graph
+
+postscript(file = "../Latex_file/Graphs/PM2.5_by_site_graph.eps",width = 10, height = 8, horizontal = F)
+PM2.5_by_site_graph
+dev.off()
+
+  
+```
+
+
+
+
+
+#O3 analysis by site
+
+```{r}
+
+O3_by_site <- o3_local_data %>% group_by(site)%>%
+  summarise(Total = sum(o3)) 
+O3_by_site
+
+```
+```{r}
+O3_by_site_graph<-O3_by_site%>%
+  mutate(short_site = str_trim(str_extract(site, "^[^-]+"))) %>%
+  ggplot(aes(x = short_site, y = Total, fill = site)) +
+  geom_bar(stat = "identity") +
+  labs(
+       x = "Site",
+       y = "Total Emissions") +
+  theme_minimal()+
+  scale_y_continuous(labels = scales::comma_format(scale = 1e-3, suffix = "K"))
+
+O3_by_site_graph
+
+postscript(file = "../Latex_file/Graphs/O3_by_site_graph.eps",width = 10, height = 8, horizontal = F)
+O3_by_site_graph
+dev.off()
+  
+  
+```
+
+
+#so2 analysis by site
+
+```{r}
+so2_by_site <- So2_local_data %>% group_by(site)%>%
+  summarise(Total = sum(so2)) 
+so2_by_site
+```
+
